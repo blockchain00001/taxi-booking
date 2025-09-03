@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   FaUser, FaHistory, FaCreditCard, FaCog, FaMapMarkerAlt, 
   FaPhone, FaEnvelope, FaShieldAlt, FaStar, FaTaxi, FaPlus,
   FaEdit, FaTrash, FaEye, FaBell, FaLocationArrow, FaCalendarAlt,
   FaClock, FaDollarSign, FaCheckCircle, FaTimesCircle, FaExclamationTriangle,
-  FaArrowUp, FaArrowDown, FaChartLine, FaGift, FaQrcode
+  FaArrowUp, FaArrowDown, FaChartLine, FaGift, FaQrcode, FaCamera
 } from 'react-icons/fa';
 import axios from 'axios';
 import './Dashboard.css';
@@ -19,6 +19,19 @@ const Dashboard = () => {
   const [stats, setStats] = useState({});
   const [notifications, setNotifications] = useState([]);
   const [editMode, setEditMode] = useState(false);
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(null);
+  const [filteredBookings, setFilteredBookings] = useState([]);
+  const [activeFilter, setActiveFilter] = useState('all');
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [newNotification, setNewNotification] = useState({ title: '', message: '', type: 'system' });
+  const [newPaymentMethod, setNewPaymentMethod] = useState({ type: 'card', number: '', expiry: '', cvv: '' });
+  const [showQuickActionModal, setShowQuickActionModal] = useState(false);
+  const [quickActionType, setQuickActionType] = useState('');
+  
+  const fileInputRef = useRef();
   const [formData, setFormData] = useState({
     name: user?.name || '',
     email: user?.email || '',
@@ -44,7 +57,9 @@ const Dashboard = () => {
 
       // Fetch bookings
       const bookingsResponse = await axios.get('/api/bookings', { headers });
-      setBookings(bookingsResponse.data.bookings || []);
+      const fetchedBookings = bookingsResponse.data.bookings || [];
+      setBookings(fetchedBookings);
+      setFilteredBookings(fetchedBookings);
 
       // Fetch payments
       const paymentsResponse = await axios.get('/api/payments/transactions', { headers });
@@ -55,7 +70,7 @@ const Dashboard = () => {
       setNotifications(notificationsResponse.data.notifications || []);
 
       // Calculate stats
-      const totalRides = bookingsResponse.data.bookings?.length || 0;
+      const totalRides = fetchedBookings.length;
       const totalSpent = paymentsResponse.data.transactions?.reduce((sum, t) => 
         t.type === 'debit' ? sum + t.amount : sum, 0) || 0;
       const avgRating = 4.8; // This would come from backend
@@ -78,6 +93,15 @@ const Dashboard = () => {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
+  // Filter bookings
+  useEffect(() => {
+    if (activeFilter === 'all') {
+      setFilteredBookings(bookings);
+    } else {
+      setFilteredBookings(bookings.filter(booking => booking.status === activeFilter));
+    }
+  }, [activeFilter, bookings]);
+
   // Handle form changes
   const handleFormChange = (e) => {
     setFormData({
@@ -96,10 +120,183 @@ const Dashboard = () => {
       
       updateUser(response.data.user);
       setEditMode(false);
-      // Show success message
+      alert('Profile updated successfully!');
     } catch (error) {
       console.error('Error updating profile:', error);
-      // Show error message
+      alert('Failed to update profile. Please try again.');
+    }
+  };
+
+  // Handle avatar file selection
+  const handleAvatarChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setAvatarFile(file);
+      const reader = new FileReader();
+      reader.onload = (e) => setAvatarPreview(e.target.result);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Upload avatar
+  const handleAvatarUpload = async () => {
+    if (!avatarFile) return;
+    
+    try {
+      const formData = new FormData();
+      formData.append('avatar', avatarFile);
+      
+      const token = localStorage.getItem('token');
+      const response = await axios.put('/api/users/avatar', formData, {
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      updateUser(response.data.user);
+      setShowAvatarModal(false);
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      alert('Avatar updated successfully!');
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+      alert('Failed to upload avatar. Please try again.');
+    }
+  };
+
+  // Handle booking actions
+  const handleBookingAction = async (bookingId, action) => {
+    try {
+      const token = localStorage.getItem('token');
+      const headers = { Authorization: `Bearer ${token}` };
+      
+      switch (action) {
+        case 'cancel':
+          await axios.put(`/api/bookings/${bookingId}/status`, { status: 'cancelled' }, { headers });
+          break;
+        case 'modify':
+          // This would open a modification modal
+          alert('Modification feature coming soon!');
+          break;
+        case 'view':
+          // This would open a detailed view modal
+          alert('Detailed view feature coming soon!');
+          break;
+        default:
+          break;
+      }
+      
+      // Refresh data
+      fetchDashboardData();
+    } catch (error) {
+      console.error('Error performing booking action:', error);
+      alert('Failed to perform action. Please try again.');
+    }
+  };
+
+  // Handle payment method actions
+  const handlePaymentAction = async (paymentId, action) => {
+    try {
+      const token = localStorage.getItem('token');
+      const headers = { Authorization: `Bearer ${token}` };
+      
+      switch (action) {
+        case 'delete':
+          await axios.delete(`/api/payments/methods/${paymentId}`, { headers });
+          break;
+        case 'edit':
+          // This would open an edit modal
+          alert('Edit payment method feature coming soon!');
+          break;
+        default:
+          break;
+      }
+      
+      // Refresh data
+      fetchDashboardData();
+    } catch (error) {
+      console.error('Error performing payment action:', error);
+      alert('Failed to perform action. Please try again.');
+    }
+  };
+
+  // Add new payment method
+  const handleAddPaymentMethod = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post('/api/payments/methods', newPaymentMethod, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      setShowPaymentModal(false);
+      setNewPaymentMethod({ type: 'card', number: '', expiry: '', cvv: '' });
+      alert('Payment method added successfully!');
+      fetchDashboardData();
+    } catch (error) {
+      console.error('Error adding payment method:', error);
+      alert('Failed to add payment method. Please try again.');
+    }
+  };
+
+  // Handle notification actions
+  const handleNotificationAction = async (notificationId, action) => {
+    try {
+      const token = localStorage.getItem('token');
+      const headers = { Authorization: `Bearer ${token}` };
+      
+      switch (action) {
+        case 'mark-read':
+          await axios.put(`/api/notifications/${notificationId}/read`, {}, { headers });
+          break;
+        case 'delete':
+          await axios.delete(`/api/notifications/${notificationId}`, { headers });
+          break;
+        default:
+          break;
+      }
+      
+      fetchDashboardData();
+    } catch (error) {
+      console.error('Error performing notification action:', error);
+      alert('Failed to perform action. Please try again.');
+    }
+  };
+
+  // Mark all notifications as read
+  const handleMarkAllAsRead = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.put('/api/notifications/read-all', {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      fetchDashboardData();
+      alert('All notifications marked as read!');
+    } catch (error) {
+      console.error('Error marking notifications as read:', error);
+      alert('Failed to mark notifications as read. Please try again.');
+    }
+  };
+
+  // Handle quick actions
+  const handleQuickAction = (action) => {
+    setQuickActionType(action);
+    setShowQuickActionModal(true);
+  };
+
+  // Handle preference toggles
+  const handlePreferenceToggle = async (preference, value) => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.put('/api/users/preferences', { [preference]: value }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      alert('Preference updated successfully!');
+    } catch (error) {
+      console.error('Error updating preference:', error);
+      alert('Failed to update preference. Please try again.');
     }
   };
 
@@ -161,19 +358,19 @@ const Dashboard = () => {
       <div className="quick-actions">
         <h3>Quick Actions</h3>
         <div className="action-buttons">
-          <button className="action-btn primary">
+          <button className="action-btn primary" onClick={() => handleQuickAction('book-ride')}>
             <FaPlus />
             <span>Book a Ride</span>
           </button>
-          <button className="action-btn secondary">
+          <button className="action-btn secondary" onClick={() => handleQuickAction('scan-qr')}>
             <FaQrcode />
             <span>Scan QR Code</span>
           </button>
-          <button className="action-btn success">
+          <button className="action-btn success" onClick={() => handleQuickAction('redeem-code')}>
             <FaGift />
             <span>Redeem Code</span>
           </button>
-          <button className="action-btn info">
+          <button className="action-btn info" onClick={() => handleQuickAction('share-location')}>
             <FaLocationArrow />
             <span>Share Location</span>
           </button>
@@ -210,12 +407,12 @@ const Dashboard = () => {
       <div className="profile-header">
         <div className="profile-avatar-section">
           <img 
-            src={user?.avatar || 'https://via.placeholder.com/120x120/6366f1/ffffff?text=U'} 
+            src={avatarPreview || user?.avatar || 'https://via.placeholder.com/120x120/6366f1/ffffff?text=U'} 
             alt={user?.name} 
             className="profile-avatar" 
           />
-          <button className="avatar-edit-btn">
-            <FaEdit />
+          <button className="avatar-edit-btn" onClick={() => setShowAvatarModal(true)}>
+            <FaCamera />
           </button>
         </div>
         <div className="profile-info">
@@ -338,24 +535,49 @@ const Dashboard = () => {
     <div className="dashboard-section">
       <div className="section-header">
         <h2>My Bookings</h2>
-        <button className="btn btn-primary">
+        <button className="btn btn-primary" onClick={() => handleQuickAction('book-ride')}>
           <FaPlus /> New Booking
         </button>
       </div>
       
       <div className="bookings-filters">
-        <button className="filter-btn active">All</button>
-        <button className="filter-btn">Upcoming</button>
-        <button className="filter-btn">Active</button>
-        <button className="filter-btn">Completed</button>
-        <button className="filter-btn">Cancelled</button>
+        <button 
+          className={`filter-btn ${activeFilter === 'all' ? 'active' : ''}`}
+          onClick={() => setActiveFilter('all')}
+        >
+          All
+        </button>
+        <button 
+          className={`filter-btn ${activeFilter === 'upcoming' ? 'active' : ''}`}
+          onClick={() => setActiveFilter('upcoming')}
+        >
+          Upcoming
+        </button>
+        <button 
+          className={`filter-btn ${activeFilter === 'active' ? 'active' : ''}`}
+          onClick={() => setActiveFilter('active')}
+        >
+          Active
+        </button>
+        <button 
+          className={`filter-btn ${activeFilter === 'completed' ? 'active' : ''}`}
+          onClick={() => setActiveFilter('completed')}
+        >
+          Completed
+        </button>
+        <button 
+          className={`filter-btn ${activeFilter === 'cancelled' ? 'active' : ''}`}
+          onClick={() => setActiveFilter('cancelled')}
+        >
+          Cancelled
+        </button>
       </div>
       
       <div className="bookings-list">
         {loading ? (
           <div className="loading-state">Loading bookings...</div>
-        ) : bookings.length > 0 ? (
-          bookings.map((booking, index) => (
+        ) : filteredBookings.length > 0 ? (
+          filteredBookings.map((booking, index) => (
             <div key={index} className="booking-card">
               <div className="booking-header">
                 <h3>{booking.pickupLocation} → {booking.destinationLocation}</h3>
@@ -382,16 +604,25 @@ const Dashboard = () => {
                 </div>
               </div>
               <div className="booking-actions">
-                <button className="btn btn-outline btn-sm">
+                <button 
+                  className="btn btn-outline btn-sm"
+                  onClick={() => handleBookingAction(booking.id, 'view')}
+                >
                   <FaEye /> View Details
                 </button>
                 {booking.status === 'upcoming' && (
-                  <button className="btn btn-secondary btn-sm">
+                  <button 
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => handleBookingAction(booking.id, 'modify')}
+                  >
                     <FaEdit /> Modify
                   </button>
                 )}
                 {booking.status === 'upcoming' && (
-                  <button className="btn btn-danger btn-sm">
+                  <button 
+                    className="btn btn-danger btn-sm"
+                    onClick={() => handleBookingAction(booking.id, 'cancel')}
+                  >
                     <FaTimesCircle /> Cancel
                   </button>
                 )}
@@ -401,9 +632,11 @@ const Dashboard = () => {
         ) : (
           <div className="empty-state">
             <FaTaxi className="empty-icon" />
-            <h3>No Bookings Yet</h3>
-            <p>Start your journey by booking your first ride!</p>
-            <button className="btn btn-primary">Book a Ride</button>
+            <h3>No Bookings Found</h3>
+            <p>No bookings match the current filter.</p>
+            <button className="btn btn-primary" onClick={() => setActiveFilter('all')}>
+              Show All Bookings
+            </button>
           </div>
         )}
       </div>
@@ -415,7 +648,7 @@ const Dashboard = () => {
     <div className="dashboard-section">
       <div className="section-header">
         <h2>Payment Methods</h2>
-        <button className="btn btn-primary">
+        <button className="btn btn-primary" onClick={() => setShowPaymentModal(true)}>
           <FaPlus /> Add Payment Method
         </button>
       </div>
@@ -427,10 +660,16 @@ const Dashboard = () => {
             <p>Expires 12/25</p>
           </div>
           <div className="payment-actions">
-            <button className="btn btn-outline btn-sm">
+            <button 
+              className="btn btn-outline btn-sm"
+              onClick={() => handlePaymentAction(1, 'edit')}
+            >
               <FaEdit />
             </button>
-            <button className="btn btn-outline btn-sm">
+            <button 
+              className="btn btn-outline btn-sm"
+              onClick={() => handlePaymentAction(1, 'delete')}
+            >
               <FaTrash />
             </button>
           </div>
@@ -442,10 +681,16 @@ const Dashboard = () => {
             <p>Expires 08/26</p>
           </div>
           <div className="payment-actions">
-            <button className="btn btn-outline btn-sm">
+            <button 
+              className="btn btn-outline btn-sm"
+              onClick={() => handlePaymentAction(2, 'edit')}
+            >
               <FaEdit />
             </button>
-            <button className="btn btn-outline btn-sm">
+            <button 
+              className="btn btn-outline btn-sm"
+              onClick={() => handlePaymentAction(2, 'delete')}
+            >
               <FaTrash />
             </button>
           </div>
@@ -490,7 +735,14 @@ const Dashboard = () => {
     <div className="dashboard-section">
       <div className="section-header">
         <h2>Notifications</h2>
-        <button className="btn btn-outline">Mark All as Read</button>
+        <div className="notification-actions">
+          <button className="btn btn-outline" onClick={handleMarkAllAsRead}>
+            Mark All as Read
+          </button>
+          <button className="btn btn-primary" onClick={() => setShowNotificationModal(true)}>
+            <FaPlus /> Send Test
+          </button>
+        </div>
       </div>
       
       <div className="notifications-list">
@@ -512,9 +764,17 @@ const Dashboard = () => {
               </div>
               <div className="notification-actions">
                 {!notification.read && (
-                  <button className="btn btn-outline btn-sm">Mark Read</button>
+                  <button 
+                    className="btn btn-outline btn-sm"
+                    onClick={() => handleNotificationAction(notification.id, 'mark-read')}
+                  >
+                    Mark Read
+                  </button>
                 )}
-                <button className="btn btn-outline btn-sm">
+                <button 
+                  className="btn btn-outline btn-sm"
+                  onClick={() => handleNotificationAction(notification.id, 'delete')}
+                >
                   <FaTrash />
                 </button>
               </div>
@@ -574,7 +834,11 @@ const Dashboard = () => {
             <p>Receive booking confirmations and updates</p>
           </div>
           <label className="toggle">
-            <input type="checkbox" defaultChecked />
+            <input 
+              type="checkbox" 
+              defaultChecked 
+              onChange={(e) => handlePreferenceToggle('emailNotifications', e.target.checked)}
+            />
             <span className="slider"></span>
           </label>
         </div>
@@ -585,7 +849,11 @@ const Dashboard = () => {
             <p>Receive ride updates via text message</p>
           </div>
           <label className="toggle">
-            <input type="checkbox" defaultChecked />
+            <input 
+              type="checkbox" 
+              defaultChecked 
+              onChange={(e) => handlePreferenceToggle('smsNotifications', e.target.checked)}
+            />
             <span className="slider"></span>
           </label>
         </div>
@@ -596,7 +864,10 @@ const Dashboard = () => {
             <p>Allow access to location for better service</p>
           </div>
           <label className="toggle">
-            <input type="checkbox" />
+            <input 
+              type="checkbox" 
+              onChange={(e) => handlePreferenceToggle('locationServices', e.target.checked)}
+            />
             <span className="slider"></span>
           </label>
         </div>
@@ -650,6 +921,115 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Avatar Upload Modal */}
+      {showAvatarModal && (
+        <div className="modal-overlay" onClick={() => setShowAvatarModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Update Profile Picture</h3>
+            <div className="avatar-upload">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarChange}
+                style={{ display: 'none' }}
+              />
+              <button 
+                className="btn btn-outline"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Choose File
+              </button>
+              {avatarPreview && (
+                <img src={avatarPreview} alt="Preview" className="avatar-preview" />
+              )}
+            </div>
+            <div className="modal-actions">
+              <button 
+                className="btn btn-primary" 
+                onClick={handleAvatarUpload}
+                disabled={!avatarFile}
+              >
+                Upload
+              </button>
+              <button 
+                className="btn btn-outline" 
+                onClick={() => setShowAvatarModal(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Method Modal */}
+      {showPaymentModal && (
+        <div className="modal-overlay" onClick={() => setShowPaymentModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Add Payment Method</h3>
+            <div className="form-group">
+              <label className="form-label">Card Number</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="1234 5678 9012 3456"
+                value={newPaymentMethod.number}
+                onChange={(e) => setNewPaymentMethod({...newPaymentMethod, number: e.target.value})}
+              />
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Expiry Date</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="MM/YY"
+                  value={newPaymentMethod.expiry}
+                  onChange={(e) => setNewPaymentMethod({...newPaymentMethod, expiry: e.target.value})}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">CVV</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="123"
+                  value={newPaymentMethod.cvv}
+                  onChange={(e) => setNewPaymentMethod({...newPaymentMethod, cvv: e.target.value})}
+                />
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-primary" onClick={handleAddPaymentMethod}>
+                Add Payment Method
+              </button>
+              <button className="btn btn-outline" onClick={() => setShowPaymentModal(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Action Modal */}
+      {showQuickActionModal && (
+        <div className="modal-overlay" onClick={() => setShowQuickActionModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>{quickActionType === 'book-ride' ? 'Book a Ride' : 
+                 quickActionType === 'scan-qr' ? 'Scan QR Code' :
+                 quickActionType === 'redeem-code' ? 'Redeem Code' :
+                 quickActionType === 'share-location' ? 'Share Location' : 'Quick Action'}</h3>
+            <p>This feature is coming soon!</p>
+            <div className="modal-actions">
+              <button className="btn btn-primary" onClick={() => setShowQuickActionModal(false)}>
+                Got it!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

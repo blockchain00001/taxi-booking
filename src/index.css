@@ -22,7 +22,13 @@ code {
   --primary-color: #2563eb;
   --primary-dark: #1d4ed8;
   --secondary-color: #f59e0b;
+  --secondary-dark: #d97706;
   --accent-color: #10b981;
+  --success-color: #22c55e;
+  --warning-color: #f59e0b;
+  --danger-color: #ef4444;
+  --danger-dark: #dc2626;
+  --info-color: #3b82f6;
   --text-primary: #1f2937;
   --text-secondary: #6b7280;
   --text-light: #9ca3af;
